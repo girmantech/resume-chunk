@@ -1,112 +1,209 @@
-import Image from "next/image";
+"use client";
+import { useState, useEffect, useCallback } from "react";
+import { readPdf } from "lib/parse-resume-from-pdf/read-pdf";
+import type { TextItems } from "lib/parse-resume-from-pdf/types";
+import { groupTextItemsIntoLines } from "lib/parse-resume-from-pdf/group-text-items-into-lines";
+import { groupLinesIntoSections } from "lib/parse-resume-from-pdf/group-lines-into-sections";
+import { sectionsToChunk } from "lib/parse-resume-from-pdf/sections-to-chunk";
+import { extractResumeFromSections } from "lib/parse-resume-from-pdf/extract-resume-from-sections";
+import { ResumeDropzone } from "components/ResumeDropzone";
+import { Heading } from "components/documentation";
+import { ResumeTable } from "resume-parser/ResumeTable";
+import { FlexboxSpacer } from "components/FlexboxSpacer";
+import { ResumeParserAlgorithmArticle } from "resume-parser/ResumeParserAlgorithmArticle";
 
-export default function Home() {
+export default function ResumeParser() {
+  const [fileUrl, setFileUrl] = useState<string>("");
+  const [textItems, setTextItems] = useState<TextItems>([]);
+  const [message, setMessage] = useState('');
+  const [correctName, setCorrectName] = useState<string>('');
+  const [resumes, setResumes] = useState<string[]>([]);
+  const [currentResumeIndex, setCurrentResumeIndex] = useState<number>(0);
+
+  const lines = groupTextItemsIntoLines(textItems || []);
+  const sections = groupLinesIntoSections(lines);
+  const resume = extractResumeFromSections(sections);
+
+  async function deleteChunks() {
+    setMessage('Deleting chunks...');
+    try {
+      const response = await fetch('/api/delete-chunks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete chunks');
+      }
+      setMessage('Chunks deleted successfully');
+    } catch (error) {
+      setMessage('Error deleting chunks');
+    }
+  }
+
+  const sendChunksToBackend = useCallback(async (chunkedSections: string[]) => {
+    if (fileUrl === "") return;
+
+    try {
+      const response = await fetch('/api/upload-chunks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(chunkedSections),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const result = await response.json();
+      setMessage(result.message);
+    } catch (error) {
+      console.error('Error sending chunks:', error);
+      setMessage('Error sending chunks');
+    }
+  }, [fileUrl]);
+
+  const handleSumbit = () => {
+    setMessage('Sending chunks to backend...');
+    const { name, chunkedSections } = sectionsToChunk(sections, correctName || resume.profile.name);
+    setMessage("JSON file created successfully");
+    // sendChunksToBackend(chunkedSections);
+  };
+
+  // const processNextResume = async () => {
+  //   if (currentResumeIndex >= resumes.length) {
+  //     setMessage('All resumes processed.');
+  //     return;
+  //   }
+
+  //   const resumeFile = resumes[currentResumeIndex];
+  //   setMessage(`Processing ${resumeFile}...`);
+
+  //   try {
+  //     const response = await fetch('/api/process-resumes', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify({ file: resumeFile }),
+  //     });
+
+  //     if (!response.ok) {
+  //       throw new Error('Failed to process resume');
+  //     }
+
+  //     const result = await response.json();
+  //     setMessage(result.message);
+
+  //     setCurrentResumeIndex(currentResumeIndex + 1);
+  //   } catch (error) {
+  //     console.error('Error processing resume:', error);
+  //     setMessage('Error processing resume');
+  //   }
+  // };
+
+  // const fetchAndProcessResumes = async () => {
+  //   setMessage('Fetching resumes...');
+  //   try {
+  //     const response = await fetch('/api/process-resumes');
+  //     const result = await response.json();
+
+  //     if (result.files) {
+  //       setResumes(result.files);
+  //       setCurrentResumeIndex(0);
+  //       processNextResume();
+  //     } else {
+  //       setMessage('No resumes found.');
+  //     }
+  //   } catch (error) {
+  //     console.error('Error fetching resumes:', error);
+  //     setMessage('Error fetching resumes');
+  //   }
+  // };
+
+  // useEffect(() => {
+  //   if (currentResumeIndex < resumes.length) {
+  //     processNextResume();
+  //   }
+  // }, [currentResumeIndex]);
+
+  useEffect(() => {
+    async function fetchTextItems() {
+      if (fileUrl.length === 0) {
+        setMessage('');
+        setCorrectName('');
+        return;
+      }
+      console.log('Reading PDF:', fileUrl);
+      const textItemsFromPDF = await readPdf(fileUrl);
+      setTextItems(textItemsFromPDF);
+    }
+    fetchTextItems();
+  }, [fileUrl]);
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">src/app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:size-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
+    <main className="h-full w-full overflow-hidden">
+      <div className="grid md:grid-cols-2">
+        {fileUrl.length > 0 ? <div className="flex justify-center md:justify-end">
+          <section className="mt-5 grow px-4 md:max-w-[750px] md:px-0">
+            <div className="aspect-h-[9.5] aspect-w-7">
+              <iframe src={`${fileUrl}#navpanes=0`} className="h-full w-full" />
+            </div>
+          </section>
+          <FlexboxSpacer maxWidth={45} className="hidden md:block" />
+        </div> : <div className="flex justify-center mt-10">Upload a PDF</div>}
+        <div className="flex px-6 text-gray-900 md:h-100vh md:overflow-y-scroll">
+          <FlexboxSpacer maxWidth={45} className="hidden md:block" />
+          <section className="max-w-[750px] grow">
+            <Heading className="text-primary !mt-4">
+              Resume Parser Playground
+            </Heading>
+            <div className="mt-3">
+              {message}
+              <ResumeDropzone
+                onFileUrlChange={(fileUrl) =>
+                  setFileUrl(fileUrl || "")
+                }
+                playgroundView={true}
+              />
+            </div>
+            <input 
+              type="text" 
+              value={correctName} 
+              onChange={(e) => setCorrectName(e.target.value)} 
+              placeholder="Correct Name" 
+              className="border border-gray-300 rounded-md p-2 w-full" 
             />
-          </a>
+            <button 
+              onClick={handleSumbit} 
+              className="bg-blue-500 text-white rounded-md p-2 mt-2"
+            >
+              Parse
+            </button>
+            <button 
+              onClick={deleteChunks} 
+              className="bg-red-500 text-white rounded-md p-2 mt-2 ml-2"
+            >
+              Delete All Chunks
+            </button>
+            {/* <button 
+              onClick={fetchAndProcessResumes} 
+              className="bg-green-500 text-white rounded-md p-2 mt-2 ml-2"
+            >
+              Process All Resumes
+            </button> */}
+            <ResumeTable resume={resume} />
+            <ResumeParserAlgorithmArticle
+              textItems={textItems}
+              lines={lines}
+              sections={sections}
+            />
+            <div className="pt-24" />
+          </section>
         </div>
-      </div>
-
-      <div className="relative z-[-1] flex place-items-center before:absolute before:h-[300px] before:w-full before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 sm:before:w-[480px] sm:after:w-[240px] before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
-
-      <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-balance text-sm opacity-50">
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
       </div>
     </main>
   );
